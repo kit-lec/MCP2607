@@ -1,0 +1,21 @@
+USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+
+OPENAI_API_KEY="sk-proj-***************************"
+HF_TOKEN=hf_******************************
+
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
+LANGCHAIN_API_KEY=lsv2_pt_********************************************
+
+CLOVASTUDIO_TEST_API_KEY=nv-********************************
+
+ALPHA_VANTAGE_API_KEY=*******************************
+
+PINECONE_API_KEY=**********************************
+
+
+GEMINI_API_KEY=**********************************
+
+TAVILY_API_KEY=**********************************
+
+DART_API_KEY=************************************

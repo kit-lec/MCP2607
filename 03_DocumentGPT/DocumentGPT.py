@@ -23,13 +23,81 @@ from langchain_openai.embeddings.base import OpenAIEmbeddings
 from langchain_text_splitters.character import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
+# LangChain 의 context 안에 있는 callback handler 는
+# 기본적으로 LLM 의 event 를 listen 하는 class 다. 가령.
+# ex) LLM 이 무언가를 만들기 시작할때,  작업을 끝낼 때,  LLM 이 글자를 생성하거나,  
+#     streaming 할때, LLM 에 에러가 발생할때.. 등등
+# callback handler 를 사용하여 log 를 작성하거나 analytics 등으로 보내는 등의 유용한 동작을 구현해볼수 있다.
+from langchain_core.callbacks.base import BaseCallbackHandler
+
 # ────────────────────────────────────────
 # 🎃 LLM 로직
 # ────────────────────────────────────────
+
+class ChatCallbackHandler(BaseCallbackHandler):
+    # CallbackHandler 는 event 들을 listen 하는 여러 함수들이 있다.
+    # on_xxx() 으로 시작하는 함수들을 오버라이딩 하여 구현한다
+    #    ex) LLM 상에서 발생한 event 를 다루는 함수들
+    #       chain, retriever, 혹은 agent 에 대한 함수들도 있다.
+    #    이벤트핸들러 함수 참조: https://python.langchain.com/api_reference/core/callbacks/langchain_core.callbacks.base.BaseCallbackHandler.html#langchain_core.callbacks.base.BaseCallbackHandler
+
+    # ↓ on_llm_start() : LLM 작업 시작할때 호출
+    #   많은 argument 들이 있지만 이번예제에선 걍 *args, **kwargs 로 받아낸다.  
+    def on_llm_start(self, *args, **kwargs):
+        self.message = ""
+        self.message_box = st.empty()  # token 텍스트들로 채워나갈 메세지 박스
+
+    # ↓ on_llm_end() : LLM 작업 종료할때 호출
+    def on_llm_end(self, *args, **kwargs):
+        # LLM 의 답변이 끝나면, 메세지를 저장
+        save_message(self.message, "ai")
+
+    # ↓ on_llm_new_token() : LLM이 생성해내는 새로운 token 마다 호출
+    def on_llm_new_token(self, token, *args, **kwargs):
+        self.message += token
+        self.message_box.markdown(self.message)  # 새로운 token 이 추가될때마다 추가된 message 로 업데이트.
+
+
 llm = ChatOpenAI(
+    model='gpt-4o',
     temperature=0.1,
+    streaming=True,
+    callbacks=[
+        ChatCallbackHandler(),
+    ],
 )
 
+prompt = ChatPromptTemplate.from_messages([
+    ("system", """
+        Answer the question using ONLY the following context.
+        If you don't know the answer just say you don't know. DON'T make anything up.            
+
+        Context: {context}
+    """),
+    ("human", "{question}"),
+])
+
+
+def format_docs(docs):
+    """retrieve 된 Document 들을 하나의 문자열로 만들기"""
+    return "\n\n".join(doc.page_content for doc in docs)
+
+def call_chain(retriever, message):
+    chain = (
+        {
+            # ② chain 의 input 을 이용해 retriever 를 자동으로 invoke => 결과 List[Document]
+            # ③ 위 결과를 우리가 원하는 포맷(str)으로 변환하는 함수(format_docs)의 입력으로 전달.
+            #   함수의 리턴값 str 이 'context' 값에 저장
+            "context": retriever | RunnableLambda(format_docs),
+            # ④ chain 의 input 이 'question' 값에도 전달된다. 
+            "question": RunnablePassthrough(),
+        }
+        | prompt 
+        | llm
+    )
+
+    response = chain.invoke(message)
+    return response
 
 # ────────────────────────────────────────
 # 🍇 file load & cache
@@ -175,9 +243,13 @@ if file:
     if message:
         send_message(message, "human")
 
-        # 사용자 질문(message) 에 대해 관련된 문서(들) retriev
-        docs = retriever.invoke(message)
-        # 🟨 NEXT...
+        with st.chat_message("ai"):
+            response = call_chain(retriever, message)
+
+
+        
+
+
         
 
 else:

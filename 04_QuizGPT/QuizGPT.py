@@ -298,7 +298,6 @@ if not docs:
     )
 else:   
     response = run_quiz_chain(docs)
-    st.write(response) # 확인용
         
     # form 작성
     with st.form(key="questions_form"):
@@ -309,9 +308,12 @@ else:
                      options=[answer['answer'] for answer in question['answers']],
                      key=key,
                      index=None)
-            st.write(value)  # 확인
-            
-            # 🟨 NEXT 정답 확인 로직...
+
+            # 정답 판정
+            if {"answer": value, "correct": True} in question['answers']:
+                st.success('Correct!')
+            elif value is not None:  # 오답을 선택한 경우 wrong!
+                st.error("Wrong!")
 
         button = st.form_submit_button()
 

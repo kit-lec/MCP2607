@@ -37,6 +37,23 @@ llm = ChatOpenAI(
     temperature=0.1,
 )
 
+from pinecone import Pinecone, ServerlessSpec
+from langchain_pinecone.vectorstores import PineconeVectorStore
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
+index_name = "meeting"
+
+# index 생성
+if not pc.has_index(index_name):
+    pc.create_index(
+        name=index_name,
+        vector_type="dense",
+        dimension=1536,     # text-embedding-3-small 출력차원 
+        metric="cosine",
+        spec=ServerlessSpec(cloud='aws', region="us-east-1"),  # Start플랜은 us-east-1 만 가능.
+    )
+
+
 splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
     chunk_size=800,
     chunk_overlap=100,
@@ -50,6 +67,28 @@ def load_and_split(file_path):
         metadata={"source": file_path},
     )
     return splitter.split_documents([merged])
+
+@st.cache_resource(show_spinner="Embedding file...")
+def embed_file(file_path):
+    docs = load_and_split(file_path)
+
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+
+    batch_size = 100  
+
+    for i in range(0, len(docs), batch_size):
+        batch = docs[i:i+batch_size]
+        print(f"batch[{i}:{i+batch_size}]/{len(docs)}..", end="")
+        vectorstore=PineconeVectorStore.from_documents(
+            batch,
+            embedding=embeddings,
+            index_name=index_name,
+        )
+        print("embedding 완료")
+
+    retriever = vectorstore.as_retriever()
+    return retriever
+
 
 # ────────────────────────────────────────
 # 🍇 file load & cache
@@ -222,3 +261,8 @@ if video:
                     st.write("🔷 ", summary)  # 중간단계 누적 확인
 
             st.write("✅ ", summary)
+
+    with qa_tab:
+        retriever = embed_file(transcript_path)
+        docs = retriever.invoke("Do they talk about marcus aurelius?")
+        st.write(docs) # 확인
